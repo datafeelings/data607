@@ -87,7 +87,7 @@ dbDisconnect(mydb)
 
 ```
 
-## Step 4: Explore the movie ratings
+### Step 4: Explore the movie ratings
 
 Let us look into the top rows of the imported dataset
 
