@@ -1,0 +1,151 @@
+---
+title: "DATA 607 Week 2 Homework: Movie Ratings"
+author: "by Dmitriy Vecheruk"
+date: "September 10, 2016"
+output: html_document
+---
+
+The goal of this assignment is to show how to import data from a SQL database into R.
+
+Steps  
+1. Collect data on movie ratings in a CSV file  
+2. Import CSV file with movies and ratings into MySQL database  
+3. Import the DB into R    
+4. Explore the movie ratings 
+
+### Step 1: Collect data on movie ratings
+
+I have used Google forms to make a small survey of movie ratings among my friends. The survey is available [here](https://docs.google.com/forms/d/e/1FAIpQLSeFyaXnEAZGeRTrGpb9Y0G5VOp0prFy-xmrX6XRI_Y_YqdcWQ/viewform).
+
+The data from survey responses flows into a Google Spreadsheet. The form of the [spreadsheet](https://docs.google.com/spreadsheets/d/1nTlun1uVMYds3EuoeLfR2L8x1bujtZNQHYKBa-trqtY/edit?usp=sharing) is a default defined by Google.
+
+### Step 2: Import CSV into MySQL  
+
+This step requires you to have a working instance of [MySQL Server](http://dev.mysql.com/downloads/) and to download the form responses from the step 1 as a CSV file on your computer. 
+
+Run the following SQL script to populate a new table with the movie ratings information from the survey
+
+```{r, eval = F}
+
+-- Create the schema and the table
+
+DROP SCHEMA IF EXISTS movieRatings;
+
+CREATE SCHEMA `movieRatings`;
+
+-- Create the table for movie ratings
+
+CREATE TABLE movieRatings.ratings (
+    ts VARCHAR(50),
+    star_trek VARCHAR(2) NULL,
+    suicide_squad VARCHAR(2) NULL,
+    the_lobster VARCHAR(2) NULL,
+    pets VARCHAR(2) NULL,
+    deadpool VARCHAR(2) NULL,
+    batman_the_dark_knight VARCHAR(2) NULL,
+    pulp_fiction VARCHAR(2) NULL,
+    the_lord_of_the_rings VARCHAR(2) NULL
+);
+  
+-- Populate the table for movie ratings
+  
+LOAD DATA LOCAL INFILE 'insert path to your downloaded CSV file here' 
+INTO TABLE movieRatings.ratings 
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+
+
+
+```
+
+Note the structure of the table where every movie has its own column. This is due to the nature of the questionaire, as every movie was a new question.  
+This form is not good for data storage and analysis as it does not meet the requirements of the First Normal Form. In the future, the survey design can be improved to populate a normalized table.  
+
+### Step 3: Import the DB into R  
+
+For this and the next step to run in R, the following packages should be installed *RMySQL, dplyr, tidyr, knitr, ggplot2*.
+
+Run the following R script to import the data from the MySQL database into an R data frame.
+I have used the following tutorial to write the code: https://www.r-bloggers.com/accessing-mysql-through-r/ 
+
+```{r, message=F, warning=F}
+library(RMySQL)
+
+# Create a DB connection, adjust connection information as required
+
+mydb = dbConnect(MySQL(), user='root', password='root', dbname='movieratings', host='localhost')
+
+# Fetch all data from the ratings table via a Result Set variable
+ratings = dbSendQuery(mydb, "select * from ratings")
+data = fetch(ratings) 
+
+# Close the DB connection
+dbDisconnect(mydb)
+
+```
+
+## Step 4: Explore the movie ratings
+
+Let us look into the top rows of the imported dataset
+
+```{r}
+library(knitr)
+kable(data[1:5,])
+
+```
+
+The data needs to be cleaned up and brought into the [tidy format](https://cran.r-project.org/web/packages/tidyr/vignettes/tidy-data.html) for analysis.
+```{r, message=F, warning=F}
+library(dplyr)
+library(tidyr)
+
+# Transpose the table into the tidy data format
+
+data = as.tbl(data)
+
+data = data %>% gather(movie, rating, star_trek:the_lord_of_the_rings)
+
+# Fix the rating column type and drop missing values
+data = mutate(data, rating = as.integer(rating)) %>% filter(complete.cases(rating))
+
+```
+
+After cleaning up, the top of the table looks like this:
+
+```{r}
+
+kable(data[1:5,])
+
+```
+
+Now let us first see how many ratings we have collected per movie to estimate how "objective" our view is.
+
+```{r}
+table(data$movie)
+
+```
+
+We see that each movie was rated by at least 8 people, which is not representative, but should at least provide an array of opinions about each one.
+  
+So what are the ratings of the movies?
+
+```{r}
+
+library(ggplot2)
+
+qplot(data = data, x = movie, y = rating, geom = "boxplot", fill = movie)+coord_flip() + ggtitle("Movie Ratings")
+
+```
+
+  
+As the sample is very small, opinions are split about most films. But here are some first observations:  
+  
+* The best rated movies with a median rating of 4.5 are _Pulp Fiction_ and _Pets_   
+* _The Lord of The Rings: Return of the King_ and _Star Trek: Beyond_ are more consistently popular having almost all ratings between 3 and 5 points  
+* _Suicide Squad_ got the worst rating of all: between 2 and 3 points.  
+
+**Outlook**  
+In the future, after streamlining the data collection process, more details about the movies and their ratings can be included into the analysis, such as year, genre, starring actors, budget etc.
