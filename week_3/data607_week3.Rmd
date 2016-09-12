@@ -1,0 +1,193 @@
+---
+title: "DATA 607: Week 3 Assignment"
+author: "by Dmitriy Vecheruk"
+date: "12 September 2016"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    collapsed: false
+    theme: united
+    code_folding: show
+---
+
+  
+
+# String processing 
+
+This assignment is focused on using the stringr package and base R tools to extract data from messy text strings:  
+- Problem 3 is about extracting names  
+- Problem 4 is about more complex regular expressions  
+- Problem 9 is a riddle  
+
+## Problem 3
+
+This example introduces the `stringr` package and extracts the names of characters from the raw data.  
+The assignment consists of three parts with the final goal to provide a string of character names conforming to the order `first_name last_name` 
+
+### The introductory example  
+
+
+
+```{r}
+# Code from the introductory example
+# Source: Munzert, S. et. al. (2015). Automated Data Collection with R - A Practical Guide to Web Scraping and Text Mining. Wiley.
+
+  raw.data <- "555-1239Moe Szyslak(636) 555-0113Burns, C. Montgomery555-6542Rev. Timothy Lovejoy555 8904Ned Flanders636-555-3226Simpson, Homer5553642Dr. Julius Hibbert"
+  
+  
+  library(stringr)
+  name <- unlist(str_extract_all(raw.data, "[[:alpha:]., ]{2,}"))
+
+```
+
+The resulting string looks like this  
+```{r}
+name
+```
+
+
+### 3(b) Identify records containing titles
+
+```{r}
+names_w_titles = str_detect(name, "Rev.|Dr.")
+```
+
+Here are the names again and the correspondent logical values for titles
+
+```{r}
+  name
+  names_w_titles
+
+```
+
+### 3(a) Rearrange to correct order  
+
+The goal is to rearrange the following string so that all names follow the order  `first_name last_name`.
+
+```{r echo=FALSE}
+  name
+
+```
+
+
+First we remove the titles from the names using the output of 3(b)
+
+```{r}
+name1 = str_replace_all(name, pattern = "Rev. |Dr. ", replacement = "")
+
+```
+
+For strings that do have a comma,  the order of the words should be reversed
+
+```{r}
+last_names_comma = str_extract_all(name1, "\\w+,")
+first_names_comma = str_extract_all(name1, ", \\w.+$")
+
+correct_order = paste(first_names_comma, last_names_comma)
+
+```
+
+Now insert the correctly ordered names into the main string  
+```{r}
+comma_positions = grep(",", name1)
+
+name1[comma_positions] <- correct_order[comma_positions]
+
+```
+
+Finally, remove all commas and empty spaces  
+```{r}
+name1 = str_trim(str_replace_all(name1, ",", ""))
+```
+  
+The original string and the rearranged version  
+```{r}
+
+name
+name1
+```
+
+### 3 (c) Construct a logical string for second names  
+  
+Task: Construct a logical string indicating whether a character has a second name
+
+Assuming one of the names (first or second) is abbreviated, use the "." as an 
+indicator for a second name
+```{r}
+names_second_name_1 = str_detect(name1, "\\.")
+```
+  
+
+An alternative approach would be to say that if a person has more than two words 
+in their name, one of them should be a second name. Then we can use the count of 
+space characters > 1 as and indicator.  
+```{r}
+names_second_name_2 = str_detect(name1, "(\\s.+){2,}")
+```
+
+In our case, the output is the same
+
+```{r}
+name1
+names_second_name_1
+names_second_name_2
+
+```
+
+
+## Problem 4  
+  
+Describe the types of strings that conform to the following regular expressions and construct an example that is matched by the regular expression.  
+
+(a) `[0-9]+\\$`
+(b) `\\b[a-z]{1,4}\\b`
+(c) `.*?\\.txt$`
+(d) `\\d{2}/\\d{2}/\\d{4}`
+(e) `<( .+?)>.+?<``/` `\\1>` 
+  
+### (a) 
+`[0-9]+\\$` matches a literal character `\` at the end of the string preceded by any number of digits. Example: from a string "drive123\\" this expression would match "123\\". 
+
+The R code example does not work yet due to the issues of passing the literal character `\` into the input string:
+
+```{r}
+str_match("drive123\\", "[0-9]+\\$")
+
+```
+
+### (b)
+`\\b[a-z]{1,4}\\b` matches any word that is lowercase and between 1 and 4 characters long 
+
+```{r}
+str_extract_all("a to few euro pound Euro","\\b[a-z]{1,4}\\b")
+
+```
+
+### (c)  
+`.*?\\.txt$` optionally matches any number of any characters preceding a literal case-sensitive ".txt". So either any characters followed by ".txt" at the end of the string, or just ".txt". The line break character `\n` prevents backward search beyond it.
+  
+```{r}
+str_extract_all(c("match123 ! 321.txt", "nomatch txt", "line break \n .txt"),".*?\\.txt$")
+
+```
+
+  
+### (d)  
+`\\d{2}/\\d{2}/\\d{4}` matches two digits followed by "/", then another two digits followed by "/", then four digits. This looks like a date format:  
+
+```{r}
+
+str_extract_all(c("10/10/1980", "10.10.1980"),"\\d{2}/\\d{2}/\\d{4}")
+
+```
+  
+### (e)  
+`<( .+?)>.+?<``/` `\\1>` This expression finds the shortest possible character or group of characters inside HTML tag marks `< >`, and then returns anything between this found matching group and its value enclosed in `</ >`. Thus it can extract parts of text that are inside html code:  
+
+```{r}
+str_extract_all(c("<p> This paragraph is matched </p>", "<This is not matched>"),"<(.+?)>.+?</\\1>")
+```
+
+
+
