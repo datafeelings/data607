@@ -1,0 +1,187 @@
+---
+title: "Data 607 Project 1"
+author: "by Dmitriy Vecheruk"
+date: "23 September 2016"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    collapsed: false
+    theme: united
+    code_folding: hide
+---
+
+In this project, the task is to transform a text file with chess tournament results into a clean tidy data format and store the results as a .CSV file with the following information for all of the players:     
+
+- Player’s Name  
+- Player’s State  
+- Total Number of Points  
+- Player’s Pre-Rating  
+- Average Pre Chess Rating of Opponents  
+  
+The challenge is that the input data format has a complicated structure with multiple lines holding content for a single observation.  
+
+Below you will find the outputs of the processing steps.
+In order to see the R code used to generate them, select "Show all code" on the "Code" button in the top right corner of the page or next to each of the outputs.  
+
+----  
+  
+### Step 1: Read the raw input file and turn it into a data frame  
+
+- Read the raw file    
+- Select the necessary data from even and uneven lines and combine them in a single data frame  
+
+  
+At the beginning, the raw input data looks like this  
+```{r, message=F, warning=F}
+
+# Load packages 
+
+require(dplyr)
+require(readr)
+require(tidyr)
+require(stringr)
+require(knitr)
+
+# Read the file as text and remove the annoying dash separators
+
+raw = readLines("/Users/dima/Google Drive/CUNY MSDA/DATA 607 Data Acquisition/Week_4/tournamentinfo.txt")
+
+raw = str_replace_all(raw,"-","") 
+
+print(raw[1:9])
+
+```
+
+After processing the raw file, we get a nice data frame:
+
+```{r, message=F, warning=F}
+
+# Read cleaned data into a data frame and drop the empty column
+
+inp = read.delim(textConnection(raw),header = F, sep = "|", stringsAsFactors = F) # The source for this solution is provided at the bottom of the page
+
+inp = inp[,-11]
+
+# The first two lines are the header that should be one line and also simplified
+
+hdr = paste(trimws(as.character(inp[1,])), trimws(as.character(inp[2,])))
+
+hdr = make.names(str_sub(hdr, 1,11))
+
+# Add the header
+
+inp = as.tbl(inp[-1:-2,])
+names(inp) = hdr
+
+# Player ids and names are at uneven positions
+# Player states and ranks are at even positions
+p_id = seq(1,nrow(inp),2)
+s_r_id = seq(2,nrow(inp),2)
+
+players = inp[p_id,]
+state_ranks = select(inp[s_r_id,], State = Pair.Num, Pre.Rating = Player.Name)
+
+# As we only care about wins, losses and draws, we can ignore the second line of
+# game records and just bind the columns:
+
+players = bind_cols(players, state_ranks)
+
+kable(players[1:5,])
+```
+
+However, the column values in this table are still not in the required format. Also the usage of columns starting with "Round" does not conform to the tidy data format (recording one unique fact/observation per row, which is a chess round in our case). This makes subsequent aggregation of player ratings difficult. Both of the issues are solved in the next step.  
+
+### Step 2: Clean up and further process required columns
+
+- Format the columns to the required output format  
+- Use a self-join to add opponent pre-ratings  
+  
+After formatting and converting into the tidy data format, the data frame looks like this 
+
+```{r, message=F, warning=F}
+
+# Cleanup the Pre.Rating column to single out the numerical identifier of the opponent in each round
+
+players = players %>% 
+  mutate(Pre.Rating = str_replace(Pre.Rating,"\\d+\\s+/ R:\\s+","")) %>% 
+  mutate(Pre.Rating = str_replace(Pre.Rating,"^[P].+|>.+","")) %>% 
+  mutate(Pre.Rating = as.integer(str_extract(Pre.Rating, "\\d+"))) 
+  
+# Fix formats and types of the Total points, Pair.Num, and Player.Name columns
+players = players %>% 
+  mutate(Total.Pts = as.numeric(Total.Pts),
+         Pair.Num = parse_number(Pair.Num),
+         Player.Name = trimws(Player.Name))
+  
+
+# Transform into a tidy format for easier aggregation
+
+players = players %>%
+  gather("Round","OppPairNum", 4:10) %>% 
+  mutate(OppPairNum = parse_number(OppPairNum)) 
+
+# Join player pre ratings
+
+playerRatings = select(players, Pair.Num,OppPreRating = Pre.Rating) %>% distinct()
+
+players = left_join(players, playerRatings, by = c("OppPairNum" = "Pair.Num"))
+
+kable(players[1:8,] )
+```
+
+### Step 3: Final Output
+
+- Calculate final table with average opponent ratings  
+- Store a .CSV file  
+
+```{r, message=F, warning=F}
+
+# Calculate final table with average opponent ratings
+
+players = players %>% 
+  group_by(Player.Name) %>% 
+  mutate(AvgOppPreRating = round(mean(OppPreRating, na.rm=T)))
+
+result = players %>% 
+  select(Player.Name, Player.State = State, Total.Pts, Pre.Rating, AvgOppPreRating) %>% 
+  ungroup() %>% 
+  distinct()
+
+# Store a csv
+
+write_csv(result, "/Users/dima/Google Drive/CUNY MSDA/DATA 607 Data Acquisition/Week_4/project_1_output.csv")
+
+```
+
+The final table looks like this:
+
+```{r}
+kable(head(result))
+
+```
+
+### Bonus: Diagram  
+
+The diagram below shows a comparison between the player's own pre-rating vs. their opponents' average pre-rating. The color corresponds to the total number of points scored in the tournament.  
+All observations above the gray diagonal line represent the players who had a higher pre-rating than the average of their opponents, and the points below the line represent the opposite case.  
+
+```{r, message=F,warning=F}
+
+library(plotly)
+
+plot_ly(result, x = Pre.Rating, y = AvgOppPreRating, color = Total.Pts, 
+        mode = "markers", text = paste(Player.Name,"Total Points:",Total.Pts) ) %>% 
+  add_trace(x = c(1000,max(Pre.Rating)), 
+            y= c(1000, max(AvgOppPreRating)), mode = "lines", 
+            line=list(color = "gray")) %>% 
+  layout (xaxis=list (title = "Player Pre-Rating"),
+          yaxis=list (title = "Average Pre-Rating of Opponents"),
+          title = "Pre-Tournament Ratings: Player vs Opponents' Average",
+          showlegend = FALSE)
+
+```
+
+### Sources
+
+[StackOverflow](http://stackoverflow.com/questions/2391364/converting-multiple-lines-of-text-into-a-data-frame)
