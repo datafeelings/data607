@@ -24,6 +24,8 @@ The challenge is that the input data format has a complicated structure with mul
 Below you will find the outputs of the processing steps.
 In order to see the R code used to generate them, select "Show all code" on the "Code" button in the top right corner of the page or next to each of the outputs.  
 
+*If you want to run the code on your machine, download the folder with the code and data from [GitHub](https://github.com/datafeelings/data607/tree/Week_4/week_4) and change the folder paths in the code to the downloaded directory.*  
+
 ----  
   
 ### Step 1: Read the raw input file and turn it into a data frame  
