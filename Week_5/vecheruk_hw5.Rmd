@@ -4,25 +4,160 @@ author: "by Dmitriy Vecheruk"
 date: "29 September 2016"
 output: 
   html_document:
-    toc: true
-    toc_float: true
+    toc: false
     collapsed: false
     theme: united
-    code_folding: hide
+    code_folding: show
 ---
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+## {.tabset .tabset-fade .tabset-pills}
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
+In this project, the task is to transform a table with the number of flights per airline and destination from a "wide" format to a "long" tidy data format. Specifically, the packages `dplyr` and `tidyr` are used for this purpose.  
+The tidy table is then used to analyze arrival delays per airline.
+
+### 1.Generate data and store CSV  
+  
+First we generate the assignment CSV file   
+```{r, message=F, warning=F}
+# Load the required packages
+library(dplyr)
+library(readr)
+library(tidyr)
+library(knitr)
+```
+
+```{r, message=F, warning=F}
+# Generate and store the CSV file
+
+dat = rbind(c("","","Los Angeles", "Phoenix", "San Diego", "San Francisco", "Seattle"),
+                c("ALASKA", "on time", "497","221","212","503","1841"),
+                c("", "delayed", "62","12","20","102","305"),
+                c("","","","","","",""),
+                c("AM WEST", "on time", "694", "4840","383","320","201"),
+                c("", "delayed", "117","415","65","129","61"))
+dat = data.frame(dat)
+```
+  
+The initial **untidy** data frame looks like this  
 ```{r}
-summary(cars)
+dat
+```
+  
+This data does not conform to the tidy data format, or Codd’s 3rd normal form [1][1]
+  
+```{r, eval=F}
+# Store the file
+write_csv(dat, "path_to_directory")
+rm(dat)
 ```
 
-You can also embed plots, for example:
 
-```{r, echo=FALSE}
-plot(cars)
+### 2.Read the CSV
+  
+Simply read the CSV file created in the first step from GitHub, and then process the header to add correct column names.  
+  
+```{r,message=F, warning=F}
+# Read the CSV
+
+dat = read_csv("https://raw.githubusercontent.com/datafeelings/data607/master/Week_5/flights_wide.csv",trim_ws = T)
+
+# Fix header by taking the values from the first line, then drop the header row
+names(dat) = unlist(append(c("airline", "status"),dat[1,3:7]))
+
+dat = dat[-1,]
+
+# Remove completely empty rows only
+
+dat = dat[rowSums(is.na(dat)) != ncol(dat),] # Source for this solution is provided at the bottom [2]
+
 ```
+  
+The resulting data frame looks like this at this step:  
+```{r, message=F, warning=F}
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+kable(dat)
+
+```
+  
+We see that the values of the possible variable "airport" form multiple columns.
+
+### 3.Transpose into tidy format
+  
+The goal is to have a table in which [1][1]
+  
+1. Each variable forms a column.  
+2. Each observation forms a row.  
+3. Each type of observational unit forms a table.  
+
+First, we need to fill the first column with the last non NA value. As the assignment asks to use `dplyr` and `tidyr` I'm using the following hack. 
+Actually there is a handy function `na.locf()` from the zoo package that fills the last observed non-NA value in a column.
+
+```{r, message=F, warning=F}
+# Fill the NA values with preceding non NA values
+dat = dat %>% 
+  mutate(airline = ifelse(is.na(airline)==T & is.na(lag(airline))==F,lag(airline),airline)) 
+
+```
+  
+Now we just `gather()` observations into tidy format and fix the count variable  
+```{r, message=F, warning=F}
+
+dat = dat %>% 
+  gather("airport", "flights", 3:7) %>% 
+  mutate(flights = as.integer(flights))
+```
+  
+The resulting table is displayed below. We see that now each of the variables is in its own column, which makes the analysis of data much easier.
+  
+```{r, message=F, warning=F}
+
+kable(dat)
+
+```
+  
+
+### 4.Analyze the delays per airline
+  
+In total, *Am West* made more flights than *Alaska*, but the bulk of the difference came from the very large number of flights to Phoenix by *Am West* (the airline had its hub there[3][3]). However, *Alaska* made many more flights to Seattle than *Am West*.
+
+```{r, message=F, warning=F}
+# Make a plot of flights per airport
+library(plotly)
+plot_ly(data = dat, x = airport, y = flights, group = airline, type = "bar") %>% 
+  layout(title = "Total flights per airline")
+
+```
+  
+  
+In the chart below, the vertical axis represents the percentage of delayed flights, and the size of the squares shows the number of flights per destination made by each airline.
+```{r, message=F, warning=F}
+# Make a plot of share of delays
+
+dat = dat %>% 
+  group_by(airline,airport) %>% 
+  mutate(total_flights = sum(flights)) %>% 
+  mutate(share = round(flights / total_flights,2)*100)
+
+plot_ly(data = filter(dat, status == "delayed"), x = airport, y = share, 
+        group = airline, 
+        text = paste("Total flights:", total_flights, "<br>","Delayed:", share,"%" ),
+        mode = "markers+lines", 
+        marker=list(size = total_flights, sizeref = 90, symbol = "square" ) ) %>% 
+  layout(title = "Share (%) of delayed flights per airline and destination")
+```
+  
+We see that *Am West* had a higher percentage of delayed flights than *Alaska* on each of the destinations, even on the ones like Seattle, where it had considerably less flights.
+  
+Surprisingly, it seems that the airport itself and not the number of flights per airline has something to do with the share of delayed flights. For example, the Phoenix airport had the least delayed flights for both airlines (even though *Am West* landed 23 times more planes there than *Alaska*), and the San Francisco airport had the most delays from both airlines.
+
+### 5.Sources
+[1]:http://vita.had.co.nz/papers/tidy-data.pdf "Tidy Data by Hadley Wickham"  
+[2]:http://stackoverflow.com/questions/6437164/removing-empty-rows-of-a-data-file-in-r "Stackoverflow: Removing Empty Rows"  
+[3]:https://www.wikiwand.com/en/America_West_Airlines "Wikipedia page on Am West"
+
+[1. Tidy Data by Hadley Wickham](http://vita.had.co.nz/papers/tidy-data.pdf)  
+[2.Stackoverflow: Removing Empty Rows](http://stackoverflow.com/questions/6437164/removing-empty-rows-of-a-data-file-in-r)  
+[3. Wikipedia page on Am West](https://www.wikiwand.com/en/America_West_Airlines)
+
+
