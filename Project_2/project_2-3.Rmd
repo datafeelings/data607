@@ -1,0 +1,98 @@
+---
+title: "Data 607 Project 2-3: Edinburgh Statistics"
+author: "by Dmitriy Vecheruk"
+date: "9 October 2016"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    collapsed: false
+    theme: united
+    code_folding: show
+    
+---
+### 1. Introduction
+
+This is the third and final part of the Project 2.
+  
+The goal of this exercise is to transform the data on the locality profiles (census areas) of Edinburgh and answer the following questions about the life in the city:
+  
+1) Which area has the highest proportion of students?
+2) Which area has the highest proportion of rich people?
+3) Which area is the laziest (share of people not exercising at all)?
+4) Which area is the most criminal one?
+  
+
+
+### 2. Read the data
+  
+The original dataset is an XLS file with the results of various surveys conducted in Edinburgh, available for download from [this page](http://data.edinburghopendata.info/dataset/locality-profiles).
+  
+For the sake of simplicity, I have saved it into CSV format and uploaded to GitHub.
+
+```{r,message=FALSE,warning=FALSE}
+# Load the required packages
+library(readr)
+library(knitr)
+library(tidyr)
+library(dplyr)
+library(plotly)
+library(DT)
+```
+
+
+```{r, message=FALSE,warning=FALSE, cache = T}
+raw = read_csv2("https://raw.githubusercontent.com/datafeelings/data607/master/Project_2/localityprofilesbasedatacsv.csv")
+
+```
+
+The raw data looks pretty complicated with almost 1000 rows and 110 variables:
+```{r}
+dim(raw)
+```
+
+However, removing empty columns we somewhat reduce its size
+
+```{r}
+# Remove last empty columns and the first column with numbers
+raw = select(raw, -starts_with("X")) %>% select(-no)
+
+
+```
+
+
+Before transforming the data, we need to subset the information required to answer the questions. We filter the data using the keywords from the research questions.
+
+```{r}
+
+students = raw %>% filter(grepl("Student",Indicator))
+rich = raw %>% filter(grepl("Households income",Indicator))
+lazy = raw %>% filter(grepl("No exercise",Indicator))
+criminal = raw %>% filter(grepl("crime",Indicator, ignore.case = T))
+
+```
+
+Now we have more manageable data for each of the questions, an example for the  question about students:
+
+```{r}
+kable(students[,1:10])
+```
+
+
+### 3. Transform the data into tidy format
+  
+
+### 4. Calculate summary statistics
+  
+#### 4.1. Compare viewership across seasons   
+
+
+
+### 5. Conclusion
+  
+
+
+### 6. Sources
+
+
+[StackOverflow: Removing empty rows of a data file in R](http://stackoverflow.com/questions/6437164/removing-empty-rows-of-a-data-file-in-r)
