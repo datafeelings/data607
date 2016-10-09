@@ -1,0 +1,157 @@
+---
+title: "Data 607 Project 2-1"
+author: "by Dmitriy Vecheruk"
+date: "9 October 2016"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    collapsed: false
+    theme: united
+    code_folding: show
+    
+---
+### 1. Introduction
+
+This is the first part of the Project 2.  
+This exercise is devoted to analyzing the nutrional properties of different types of milk.  
+The tasks are:  
+  
+1) Search the USDA website for five different types of milk (examples could include almond, cow, rice, goat, hemp), and combine into one master table.  
+2) Manipulate the table format so that each row represents an observation for a specific type of milk. Nutritional variables should be displayed as separate fields  
+3) Calculate the ratio of protein to total calories for each type of milk  
+4) Calculate the average calorie content per cup across all milk types  
+5) Sort the observations in ascending order by total calories per cup  
+6) Calculate net carbohydrates for each milk type (i.e. gross carbohydrates - dietary fiber)  
+
+### 2. Read the data
+
+Unfortunately, the nutrient information for just three different types of milk (almond, cow, rice) was found on the USDA website. In particular, the analyzed cow milk has 3.7% fat, almond and rice milk drinks are unsweetened. This data is downloaded into three data frames for subsequent transformaiton.
+
+```{r,message=FALSE,warning=FALSE}
+# Load the required packages
+library(readr)
+library(knitr)
+library(tidyr)
+library(dplyr)
+library(plotly)
+```
+
+
+```{r, cache = T, message=FALSE,warning=FALSE}
+
+cow = read_csv("https://ndb.nal.usda.gov/ndb/foods/show/71?format=Abridged&reportfmt=csv&Qv=1", skip = 4,trim_ws = T)
+
+almond = read_csv("https://ndb.nal.usda.gov/ndb/foods/show/4188?format=Abridged&reportfmt=csv&Qv=1", skip = 4, trim_ws = T)
+
+rice = read_csv("https://ndb.nal.usda.gov/ndb/foods/show/4472?format=Abridged&reportfmt=csv&Qv=1", skip = 4, trim_ws = T)
+
+```
+
+Intially, the data is formatted so that for each product, the nutrient data is provided in rows. Below is the cow milk data as an example: 
+
+```{r, message=FALSE,warning=FALSE}
+
+head(cow)
+
+```
+
+Even though this is an example of a "long" dataset that needs to be transformed into a "wide" format, this transformation is justified, as the current format is not compliant with the tidy data norm. 
+The problem with the current form is that each row contains observations of a different nutrient measured in different units, even though all of them are actually different dimensions of the same observation: nutrient composition of a given amount of milk. This means that in this input data, the notions of "wide" and "long" are used incorrectly.
+Therefore we proceed with the next step.
+
+### 3. Transform the data into tidy format
+For comparison purposes, we need the data in a single table with a column of product labels, and other columns for different nutritional variables.
+For better comparison, only the values per 100g of the product will be used instead of the values per cup which are not consistently defined between the products.
+Further, only the following nutritional values are relevant for the analysis: energy (total calories), protein, and dietary fiber
+
+We define a set of dplyr/tidyr transformations as a function and then apply it to each of the data sets.
+```{r}
+
+transformer = function(x, product){
+  x = x %>% 
+    select(Nutrient, Value = contains("100")) %>% # Filter out required rows only
+    filter(complete.cases(.)) %>% # leave complete cases only
+    filter(Nutrient %in% c("Energy", 
+                           "Protein",
+                           "Carbohydrate, by difference",
+                           "Fiber, total dietary")) %>%  # Filter the required nutrients
+    spread(Nutrient, Value) %>% # Transform into wide format
+    mutate(Product = product) # Add product label
+}
+  
+
+```
+
+Apply the function to the datasets and bind them together
+```{r, cache = T}
+
+cow1 = transformer(cow, "cow")
+rice1 = transformer(rice, "rice")
+almond1 = transformer(almond, "almond")
+
+df = bind_rows(cow1, rice1, almond1)
+```
+
+
+The corrected tidy format table looks as follows with the defined subset of the variables:
+
+```{r}
+library(knitr)
+kable(df)
+
+```
+
+
+### 4. Calculate summary statistics
+
+Note: instead of per cup values, per 100g values will be used for comparison.
+
+#### 4.1. Calculate the ratio of protein to total calories for each type of milk
+
+```{r, message=F,warning=F}
+
+# Rename the columns for convenience
+names(df) = c("Carbohydrate_g", "Energy_kkcal", "Fiber_g", "Protein_g", "Product")
+
+# Calculate the statistic and make a plot
+df = df %>% 
+  mutate(pr_ratio = Protein_g/Energy_kkcal)
+
+plot_ly(data=arrange(df, pr_ratio), y = pr_ratio, x = Product, type = "bar") %>%  layout(title = "Grams protein per kkcal of Energy", yaxis = list(title = "Protein ratio"))
+```
+  
+We see that plant-based types of milk provide less protein than cow milk, however almond milk is much better than rice milk in this regard. 
+  
+#### 4.2. Calculate the average calorie content per 100g across all milk types  
+
+The average calorie per 100g is **`r mean(df$Energy_kkcal)`** kkcal. A 250 ml cup of milk would contain on average **`r mean(df$Energy_kkcal)*2.5`** kkcal.
+  
+#### 4.3. Sort the observations in ascending order by total calories per 100g  
+
+```{r}
+plot_ly(data=arrange(df, Energy_kkcal), y = Energy_kkcal, x = Product, type = "bar") %>% 
+  layout(title = "Energy (kkcal) per 100g", yaxis = list(title = "Total calories per 100g"))
+```
+
+In terms of the energy, cow milk is leading as well. For a low calorie option, almond milk should be preferred. 
+
+#### 4.4. Calculate net carbohydrates for each milk type (i.e. gross carbohydrates - dietary fiber) per 100g  
+
+```{r}
+df = df %>% 
+  mutate(net_carb = Carbohydrate_g - Fiber_g)
+
+plot_ly(data=arrange(df, net_carb), y = net_carb, x = Product, 
+        type = "bar", name = "Net Carb") %>% 
+  add_trace(y = Carbohydrate_g, x = Product, 
+            type = "bar", name = "Total Carb") %>% 
+  layout(title = "Grams of total and net carbohydrates per 100g", yaxis = list(title = "Carbohydrate per 100g"))
+
+```
+  
+We see that rice milk is the only type that has any dietary fiber, but it also has vastly more carbohydrates than cow and almond milk.
+
+### 5. Conclusion
+  
+Overall, cow milk has more energy and more protein per 100g than plant based milk. However, among plant milk types, almond milk seems a good low-calorie, protein-rich option.
