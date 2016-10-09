@@ -18,7 +18,7 @@ This is the third and final part of the Project 2.
 The goal of this exercise is to transform the data on the locality profiles (census areas) of Edinburgh and answer the following questions about the life in the city:
   
 1) Which area has the highest proportion of students?
-2) Which area has the highest proportion of rich people?
+2) Which area has the highest proportion of healthy people?
 3) Which area is the laziest (share of people not exercising at all)?
 4) Which area is the most criminal one?
   
@@ -57,7 +57,6 @@ However, removing empty columns we somewhat reduce its size
 # Remove last empty columns and the first column with numbers
 raw = select(raw, -starts_with("X")) %>% select(-no)
 
-
 ```
 
 
@@ -65,9 +64,9 @@ Before transforming the data, we need to subset the information required to answ
 
 ```{r}
 
-students = raw %>% filter(grepl("Student",Indicator))
-rich = raw %>% filter(grepl("Households income",Indicator))
-lazy = raw %>% filter(grepl("No exercise",Indicator))
+students = raw %>% filter(grepl("Student",Indicator,ignore.case=T))
+health = raw %>% filter(grepl("health",Indicator, ignore.case=T))
+lazy = raw %>% filter(grepl("exercise",Indicator, ignore.case=T))
 criminal = raw %>% filter(grepl("crime",Indicator, ignore.case = T))
 
 ```
@@ -81,12 +80,87 @@ kable(students[,1:10])
 
 ### 3. Transform the data into tidy format
   
+All all subsets have the same column structure, we can construct a function performing the required transformation.
+
+```{r}
+
+transformer = function(x, filterValue) {
+  
+  # Conveniently, all columns with percentage of population have "%" in the name
+  x = x %>% select(Indicator, contains("%")) 
+  x = x %>% gather("Locality", "Share", 2:ncol(x)) %>% 
+    # Remove punctuation and digits from locality
+    mutate(Locality = gsub("[[:punct:]]", "", Locality)) %>% 
+    mutate(Locality = gsub("[[:digit:]]", "", Locality)) %>% 
+    # Convert the share field to a numeric value
+    mutate(Share = gsub("%", "", Share)) %>% 
+    mutate(Share = gsub(",", ".", Share)) %>% 
+    mutate(Share = as.numeric(Share)) %>% 
+    unique() # Remove duplicate records
+
+  # Filter the required Indicator value to the required string
+  x = filter(x, Indicator == filterValue)
+  
+}
+```
+  
+After inspecting each of the subsets, we have identified the precise strings to filter the values by. Now we can apply the transformer function to each of the subsets to get a tidy dataset. 
+
+```{r}
+students1 = transformer(students, "Student")
+health1 = transformer(health, "Very good health")
+lazy1 = transformer(lazy, "No exercise taken")
+criminal1 = transformer(criminal, "Crime deprived 15%")
+```
+
+Now the dataset for students looks tidy:
+
+```{r}
+datatable(students1)
+```
+
 
 ### 4. Calculate summary statistics
   
-#### 4.1. Compare viewership across seasons   
+Now after the data has been prepared, it is very easy to answer the questions, as the proportions per locality have already been calculated in the data. Thus we only need to filter the rows.
+  
+#### 4.1. Which area has the highest proportion of students?
+  
+```{r}
+students_ans = filter(students1, Share == max(Share))
+kable(stundets_ans)
+plot_ly(data = arrange(students1,Share), y = Locality, x = Share, type = "bar", orientation = 'h')
+
+```
+
+#### 4.2.  Which area has the highest proportion of very healthy people?
+  
+```{r}
+health_ans = filter(health1, Share == max(Share))
+kable(health_ans)
+```
+
+#### 4.3.  Which area is the laziest (share of people not exercising at all)?
+  
+```{r}
+lazy_ans = filter(lazy1, Share == max(Share))
+kable(lazy_ans)
+```
+  
+#### 4.4.  Which area is the most criminal one?
+  
+```{r}
+criminal_ans = filter(criminal1, Share == max(Share))
+kable(criminal_ans)
+```  
+  
+```{r}
+df = bind_rows(students1,health1,lazy1, criminal1)
 
 
+plot_ly(data = arrange(df,Share), y = Locality, x = Share, type = "bar", orientation = 'h', group = Indicator)
+
+```
 
 ### 5. Conclusion
   
