@@ -1,0 +1,238 @@
+---
+title: "Data 607 Project 2-2"
+author: "by Dmitriy Vecheruk"
+date: "9 October 2016"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    collapsed: false
+    theme: united
+    code_folding: show
+    
+---
+### 1. Introduction
+
+This is the second part of the Project 2.
+  
+The goal of this exercise is to get the data on the viewership of each episode of the TV series "The Walking Dead", and to compare it with IMDB ratings for the episodes.
+In particular, the tasks are:  
+1) Compare viewership across seasons   
+2) Compare public ratings of episodes on a site like IMDB or Rotten Tomatoes to the viewership  
+
+### 2. Read the data
+
+In order to read the data directly from Wikipedia and IMDB, the package `rvest`  is used. Link to the tutorial I used to understand its functions is provided at the bottom of the page.
+
+```{r,message=FALSE,warning=FALSE}
+# Load the required packages
+library(readr)
+library(knitr)
+library(tidyr)
+library(dplyr)
+library(plotly)
+library(rvest)
+library(DT)
+```
+
+First, we extract the viewership data from Wikipedia
+  
+```{r, cache=T}
+
+viewers = read_html("https://en.wikipedia.org/wiki/Template:The_Walking_Dead_ratings")
+
+# Get the table with viewer counts
+
+wiki = viewers %>% 
+  html_nodes(".wikitable") %>%
+  .[[2]] %>% 
+  html_table(header = T, fill = T)
+
+head(wiki)
+
+```
+
+Secondly, we extract episode names and ratings from the respective IMDB webpage
+  
+```{r, cache=T}
+
+wd_ratings = read_html("http://www.imdb.com/list/ls012062344/?start=1&view=compact&sort=release_date_us:asc&defaults=1&scb=0.6008014953041274")
+
+# Get episode names
+episode_list = wd_ratings %>% 
+  html_nodes(".episode a:nth-child(3)") %>%
+  html_text() 
+
+# Get episode ratings
+episode_rating = wd_ratings %>% 
+  html_nodes(".user_rating ") %>%
+  html_text()
+
+# Remove the empty string in the ratings vector
+episode_rating = episode_rating[2:length(episode_rating)]
+
+# Bind together
+imdb = data.frame(name = as.character(episode_list), 
+                  rating = as.numeric(episode_rating))
+
+head(imdb)
+```
+  
+The data from IMDB seems inconsistent in terms of the number of episodes with rating: Wikipedia lists `r length(wiki)` episodes, and IMDB data has just `r length(imdb)` episodes and no indication of season and episode number.
+
+Therefore we use an additional datasource listing all episode numbers and names to facilitate the joining of the data. This data was downloaded from the website [EpGuides](http://epguides.com/WalkingDead/) and stored as .CSV file.
+
+```{r}
+
+epnames = read_csv("https://raw.githubusercontent.com/datafeelings/data607/master/Project_2/wd_episodes.csv")
+
+kable(epnames[1:10,])
+```
+
+
+### 3. Transform the data into tidy format
+  
+Now the Wikipedia data should be cleaned and transformed into a long format for joining with the names and rating data.
+
+```{r, warning=F, message=F}
+
+
+# Apply correct column names and drop the row with names
+names(wiki) = wiki[1,]
+
+wiki = slice(wiki, 2:nrow(wiki))
+
+# Transform into tidy format and fix variable types
+
+wiki1 = wiki %>% 
+  # Gather counts per episode into one column
+  gather("episode","Mln_viewers", 2:17) %>% 
+  # Convert missing values into NAs
+  mutate(Mln_viewers = as.numeric(Mln_viewers)) %>% 
+  # Fix variable names and types for joining
+  rename(season = Season) %>% 
+  mutate(season = as.integer(season),
+         episode = as.integer(episode))
+
+```
+  
+The Wikipedia dataset is now in tidy format and can be joined with the ratings data
+
+```{r}
+
+kable(wiki[1:10,])
+
+```
+
+Join the episode viewership with the episode names and then with ratings
+```{r, message=F, warning=F}
+
+df = left_join(epnames, wiki1) %>% select (- `tvmaze link`)
+df = left_join(df, imdb, by = c("title"="name"))
+
+```
+
+Remove rows without viewer information
+
+```{r}
+
+df = df %>% filter(complete.cases(Mln_viewers))
+
+```
+
+Surprizingly, most of the name strings provided and exact match, and we now have a cleaned up tidy table with episode names, viewers, and ratings that is ready for analysis:
+
+```{r}
+
+datatable(df)
+
+```
+
+
+### 4. Calculate summary statistics
+  
+#### 4.1. Compare viewership across seasons   
+
+Let's have a look at the average viewership across the seasons and the maximum viewer numbers per season
+
+```{r}
+
+season_stats = df %>% 
+  group_by(season) %>% 
+  summarise(season_avg_v = mean(Mln_viewers), # average viewers 
+         season_max_v = max(Mln_viewers), # max viewers
+         nobs = n())
+
+datatable(season_stats)
+
+plot_ly(data = season_stats, x = season, y = season_avg_v, 
+        type = "bar", name = "Average viewers") %>% 
+  add_trace(x = season, y = season_max_v, name = "Max viewers") %>% 
+  layout(title = "Average and maximum viewers per season (Mln)",
+         yaxis = list(title = "Mln. viewers"))
+```
+  
+We see that based on the viewership numbers, it seems that "Walking Dead" has reached maximum popularity with the season 5, and afterwards it started to decline.  
+  
+What would the ratings say?
+
+
+
+#### 4.2. Compare public ratings of from IMDB to the viewership  
+
+We calculate max and average episode rating per season and see if the data follows the similar pattern with a peak in season 5.
+
+```{r}
+
+rating_stats = df %>% 
+  group_by(season) %>% 
+  summarise(season_avg_r = mean(rating, na.rm=T), # average rating 
+         season_max_r = max(rating, na.rm=T), # max rating
+         nobs = n())
+
+datatable(rating_stats)
+
+plot_ly(data = rating_stats, x = season, y = season_avg_r, 
+        type = "bar", name = "Average rating") %>% 
+  add_trace(x = season, y = season_max_r, name = "Max rating") %>% 
+  layout(title = "Average and maximum IMDB ratings per season",
+         yaxis = list(title = "IMDB Rating"))
+```
+  
+We see that in terms of the ratings, the show has been received well from the start, which has possibly contributed to its increasing popularity.
+
+Finally, let is have a look at the (possible) correlation between viewership and rating
+
+```{r}
+
+plot_ly(data = df, x = Mln_viewers, y = rating, mode = "markers", group = season, name = "Season") %>% layout(title = "Number of viewers vs. IMDB Rating per Episode", yaxis = list(title = "IMDB Rating"))
+
+```
+The colors represent the different seasons.
+  
+From the plot we see that there is no linear relationship between the viewer number and the rating.
+
+### 5. Conclusion
+  
+"The Walking Dead" seems to have passed the peak of its popularity, and the number of its viewers has start to decline in the season 6. Nevertheless, the show is consistently rated above 8 stars, and has even achieved a rating of 9.7 for some of the episodes.
+
+So far, the most watched episode has been "No Sanctuary", with 17.3 mln. viewers.
+
+```{r}
+df = ungroup(df)
+kable(filter(df, Mln_viewers == max(Mln_viewers)))
+
+```
+
+And the top rated (9.7 out of 10) episodes on IMDB so far are:
+
+```{r}
+kable(filter(df, rating == 9.7))
+```
+
+
+### 6. Sources
+
+1) Data sources are listed in the code.
+  
+2) [Rvest:easy web scraping with R](https://blog.rstudio.org/2014/11/24/rvest-easy-web-scraping-with-r/)
