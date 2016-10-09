@@ -128,45 +128,55 @@ Now after the data has been prepared, it is very easy to answer the questions, a
   
 ```{r}
 students_ans = filter(students1, Share == max(Share))
-kable(stundets_ans)
-plot_ly(data = arrange(students1,Share), y = Locality, x = Share, type = "bar", orientation = 'h')
+kable(students_ans)
 
 ```
+  
+The proportion of stundents in the population is very different between the localities: from 4 to 31 per cent.
 
 #### 4.2.  Which area has the highest proportion of very healthy people?
   
 ```{r}
 health_ans = filter(health1, Share == max(Share))
 kable(health_ans)
+summary(health1$Share)
 ```
+  
+We can see that compared to the share of students, the variation in the share of healthy people is not big.
 
 #### 4.3.  Which area is the laziest (share of people not exercising at all)?
   
 ```{r}
 lazy_ans = filter(lazy1, Share == max(Share))
 kable(lazy_ans)
+summary(lazy1$Share)
 ```
   
+Here, the variation is not big either (except for the outlier minimum value).
+
 #### 4.4.  Which area is the most criminal one?
   
 ```{r}
 criminal_ans = filter(criminal1, Share == max(Share))
 kable(criminal_ans)
+summary(criminal1$Share)
 ```  
   
-```{r}
-df = bind_rows(students1,health1,lazy1, criminal1)
-
-
-plot_ly(data = arrange(df,Share), y = Locality, x = Share, type = "bar", orientation = 'h', group = Indicator)
-
-```
+Again we see a strong variation between the localities in terms of the crime deprivation variable (it is part of the [The Scottish Index of Multiple Deprivation](http://www.gov.scot/Topics/Statistics/SIMD))
 
 ### 5. Conclusion
   
 
+```{r}
+df = bind_rows(students1,health1,lazy1, criminal1)
+
+plot_ly(data = arrange(df,Share), y = Share, type = "box", group = Indicator) %>% layout (title = "Variation in the share of indicator per locality")
+
+```  
+
+The Edinburgh dataset provides a very multi-faceted view on the population in the city.   
+We have taken just a glimpse at some of its aspects and have found out that the proportion of students and crime per locality varies strongly, and the share of very healthy and very lazy (not exercising) people is much less variable. 
 
 ### 6. Sources
 
-
-[StackOverflow: Removing empty rows of a data file in R](http://stackoverflow.com/questions/6437164/removing-empty-rows-of-a-data-file-in-r)
+[The City of Edinburgh Council](http://data.edinburghopendata.info/dataset/locality-profiles)
