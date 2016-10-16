@@ -1,0 +1,120 @@
+---
+title: "Data 607 Week 7 Assignment"
+author: "by Dmitriy Vecheruk"
+date: "15 October 2016"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    collapsed: false
+    theme: united
+    code_folding: show
+    
+---
+
+## Introduction
+  
+This week's assignment is about reading three file formats into R:
+  
+- HTML
+- XML
+- JSON
+  
+I have manually created the three files describing the authors and titles of the books on decision making and have uploaded them on GitHub.
+
+
+## Reading HTML Table
+  
+In a document with a simple structure, reading an HTML table is easy using the `readHTMLTable` function.
+```{r}
+library(XML)
+library(knitr)
+library(RCurl)
+
+url_HTML = getURL("https://raw.githubusercontent.com/datafeelings/data607/master/week_7/books.html", ssl.verifypeer = FALSE)
+
+books_HTML = readHTMLTable(url_HTML, 
+                           header = T, 
+                           which=1, 
+                           isHTML = TRUE, 
+                           stringsAsFactors = F)
+```
+The output is directly converted to a dataframe
+```{r}
+kable(books_HTML)
+```
+
+
+## Reading XML 
+  
+First, parse the XML tree and have a look at the document structure
+```{r}
+
+url_XML = getURL("https://raw.githubusercontent.com/datafeelings/data607/master/week_7/books.xml", ssl.verifypeer = FALSE)
+
+books_XML = xmlParse(url_XML)
+
+book_child = xmlChildren(books_XML)
+
+head(book_child)
+
+```
+We can see that each element that we need has a list of tags with id, title, authors, year, and ISBN.  
+Now we can populate a dataframe with the contents of each tag.
+```{r}
+books_XML_df = data.frame()
+
+books_XML_df = cbind(xpathSApply(books_XML, "//id", xmlValue),
+                     xpathSApply(books_XML, "//title", xmlValue),
+                     xpathSApply(books_XML, "//authors", xmlValue),
+                     xpathSApply(books_XML, "//year", xmlValue),
+                     xpathSApply(books_XML, "//ISBN", xmlValue))
+
+books_XML_df = data.frame(books_XML_df)
+names(books_XML_df) = c("id", "title", "authors", "year", "ISBN")
+
+kable(books_XML_df)
+```
+
+
+## Reading a JSON 
+  
+Similarly to the XML file, the JSON first should be parsed first, which is easily accomplished by the `jsonlite package`.
+However, as I have picked a different node structure than in the previous formats, the parser interprets the node of "authors" as a list of character vectors (as one of the records is an array of two authors).
+
+```{r}
+library(jsonlite)
+
+url_JSON = getURL("https://raw.githubusercontent.com/datafeelings/data607/master/week_7/books.json", ssl.verifypeer = FALSE)
+
+books_JSON = fromJSON(txt = url_JSON)
+
+str(books_JSON)
+```
+
+Forcing this file into a dataframe results in an incorrect data frame structure
+```{r}
+books_JSON_df = as.data.frame(books_JSON)
+
+kable(books_JSON_df)
+```
+  
+One solution is to collapse any embedded lists into characters first so that the "authors" column could be turned into a simple character vector.
+
+```{r}
+# Function to collapse any list longer than 1 into a character vector
+collapselist = function(x) { 
+  x = ifelse(length(unlist(x))>1,
+             yes = paste(unlist(x),collapse = ", "),
+             no = as.character(x))
+}
+
+books_JSON$Autors = sapply(books_JSON$Autors,FUN = collapselist)
+
+books_JSON_df = as.data.frame(books_JSON)
+
+kable(books_JSON_df)
+
+```
+  
+Now the data frame is correct.
