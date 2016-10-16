@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+
+<books lang="en">
+	<book>
+	<id>1</id>
+	<title>Thinking, Fast and Slow</title>
+	<authors>Daniel Kahneman</authors>
+	<year>2013</year>
+	<ISBN>0374533555</ISBN>
+</book>
+	<book>
+	<id>2</id>
+	<title>The Power of Habit: Why We Do What We Do, and How to Change</title>
+	<authors>Charles Duhigg</authors>
+	<year>2013</year>
+	<ISBN>1847946240</ISBN>
+	</book>
+	<book>
+	<id>3</id>
+	<title>The Organized Mind: Thinking Straight in the Age of Information Overload</title>
+	<authors>Daniel J. Levitin</authors>
+	<year>2015</year>
+	<ISBN>0147516315</ISBN>
+	</book>
+	<book>
+	<id>4</id>
+	<title>Mistakes Were Made (But Not by Me): Why We Justify Foolish Beliefs, Bad Decisions, and Hurtful Acts</title>
+	<authors>Carol Tavris, Elliot Aronson</authors>
+	<year>2007</year>
+	<ISBN>0151010986</ISBN>
+	</book>
+</books>

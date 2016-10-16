@@ -1,0 +1,7 @@
+{
+	"id": [1,2,3,4],
+	"Title": ["Thinking, Fast and Slow", "The Power of Habit: Why We Do What We Do, and How to Change", "The Organized Mind: Thinking Straight in the Age of Information Overload", "Mistakes Were Made (But Not by Me): Why We Justify Foolish Beliefs, Bad Decisions, and Hurtful Acts"],
+	"Autors": ["Daniel Kahneman", "Charles Duhigg","Daniel J. Levitin",["Carol Tavris", "Elliot Aronson"]],
+	"Year": [2013, 2013,2015,2007],
+	"ISBN":["0374533555", "1847946240", "0147516315", "0151010986"]
+}
