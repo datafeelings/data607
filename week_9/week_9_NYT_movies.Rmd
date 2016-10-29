@@ -1,0 +1,147 @@
+---
+title: " Movie Reviews Search Engine"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    social: menu
+    source_code: embed
+    logo: "new-york-times-logo.png"
+    css: bootstrap_cosmo_edit.css
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(rmarkdown)
+library(RCurl)
+library(jsonlite)
+library(stringr)
+library(DT)
+
+# Sources:
+# Data: http://developer.nytimes.com/
+# Logo: http://brooklynboulders.com/brooklyn/wp-content/uploads/2014/07/the_new_york_times_logo_white1.png
+
+```
+
+```{r global, include=FALSE}
+# User input with the movie name
+
+userquery = reactive(input$userstring)
+
+```
+
+
+Search {.sidebar data-width=200}
+-----------------------------------------------------------------------
+
+This search tool provides you with movie reviews from the extensive New York Times 
+movie review database.
+  
+Enter a movie title in the search box below to get the results.
+
+```{r input}
+
+textInput("userstring", label = h4("Movie"), value = "Batman", width = NULL, 
+          placeholder = "movie title...")
+
+
+```
+
+The results are sorted in a reverse chronological order, the newest movie 
+reviews first.
+
+
+
+```{r get_api_result}
+
+# Reactive as it updates based on usersting variable
+selectedData = reactive({
+  
+userquery = input$userstring
+
+# Construct a string input recognized by the API
+userquery = tolower(userquery)
+userquery = URLencode(userquery)
+
+api_param = function(tag, value) {
+  paste(tag,value, sep = "=")
+}
+
+apikey = "d2c577bfa1404ffd81d6d175ecfd5ce0"
+baseurl = "https://api.nytimes.com/svc/movies/v2/reviews/search.json?"
+
+api_param_string = paste(api_param("api-key", apikey),
+                         api_param("query", userquery),
+                         sep = "&")
+request_url = paste0(baseurl,api_param_string)
+
+raw_output = getForm(request_url)
+
+# Get the results DF and metadata out of the request JSON output
+
+parsed_output = fromJSON(raw_output, simplifyDataFrame = T, flatten = T)
+
+# Results meta
+returned_cnt = parsed_output$num_results
+
+
+# Full results DF
+dat = parsed_output$results
+dat = data.frame(dat)
+
+# Subset of result columns for display
+if (nrow(dat) == 0) {
+  
+    dat_out = data.frame()
+} else {
+  dat_out = dat[,c("display_title","summary_short","publication_date","link.url")]
+  names(dat_out) = c("Movie title", "Review summary", "Date", "Link")
+}
+
+
+dat_out  
+})
+```
+
+
+Row 
+-----------------------------------------------------------------------
+### Reviews Found
+
+```{r}
+
+renderValueBox({
+    valueBox(
+      ifelse(nrow(selectedData())>0,yes =nrow(selectedData()), no =0 ),
+      "Reviews found",
+      icon = "fa-film"
+    )
+  })
+
+```
+
+Row {data-height = 800}
+-----------------------------------------------------------------------
+### NYT Movie Reviews
+
+
+```{r}
+
+renderTable({
+  selectedData()
+},
+options = list(
+  escape=F,
+  spacing = "s")
+)
+
+```
+
+
+> Logo and Data: Copyright (c) 2016 The New York Times Company. All Rights Reserved.  
+> Code: datafeelings
+
+
