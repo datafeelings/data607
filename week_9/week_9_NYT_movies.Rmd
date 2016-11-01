@@ -52,7 +52,9 @@ textInput("userstring", label = h4("Movie"), value = "Batman", width = NULL,
 
 The results are sorted in a reverse chronological order, the newest movie 
 reviews first.
+  
 
+[![powered_by_NYT](poweredby_nytimes_150b.png)](https://developer.nytimes.com)
 
 
 ```{r get_api_result}
@@ -78,7 +80,8 @@ api_param_string = paste(api_param("api-key", apikey),
                          sep = "&")
 request_url = paste0(baseurl,api_param_string)
 
-raw_output = getForm(request_url)
+# See http://stackoverflow.com/questions/33200790/json-parsing-error-invalid-character
+raw_output = readLines(request_url, warn = FALSE) 
 
 # Get the results DF and metadata out of the request JSON output
 
@@ -130,11 +133,12 @@ Row {data-height = 800}
 
 ```{r}
 
+
 renderTable({
   selectedData()
 },
 options = list(
-  escape=F,
+  escape=T,
   spacing = "s")
 )
 
