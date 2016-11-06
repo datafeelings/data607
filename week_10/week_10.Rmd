@@ -1,0 +1,242 @@
+---
+title: "Data 607 Week 10 Assignment: Document Classification"
+author: "by Dmitriy Vecheruk"
+date: "15 October 2016"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    collapsed: false
+    theme: united
+    code_folding: show
+    
+---
+This week's assignment is aimed at parsing and classifying a sample of spam and non-spam e-mails using the `tm` and `RTextTools` packages as described in the course book.
+The labeled files are provided by https://spamassassin.apache.org/publiccorpus/ 
+
+### Build the text corpora 
+  
+
+```{r, message=F, warning=F}
+library(stringr)
+library(tm)
+```
+
+First, create the corpus of spam e-mails
+```{r spam-corpus, cache=T}
+
+if (!dir.exists("spam")){
+  download.file(url = "https://spamassassin.apache.org/publiccorpus/https://spamassassin.apache.org/publiccorpus/20021010_spam.tar.bz2", destfile = "20021010_spam.tar.bz2")
+  untar("20021010_spam.tar.bz2",compressed = "bzip2")
+}
+spam_files = list.files(path = "spam",full.names = T)
+
+# Construct the corpus frame by reading the first document
+# Note that the first file in the spam folder is a non-relevant index document, so start at index 2.
+
+tmp = readLines(con = spam_files[2])
+tmp = str_c(tmp, collapse = "")
+
+spam_corpus = Corpus(VectorSource(tmp))
+meta(spam_corpus[[1]], "label") = "spam"
+
+# Add the remaining documents from the folder
+for (i in 3: length(spam_files)) {
+ 
+  tmp = readLines(con = spam_files[i])
+  tmp = str_c(tmp, collapse = "")
+  
+  if (length(tmp) != 0) {
+    tmp_corpus = Corpus(VectorSource(tmp))
+    meta(tmp_corpus[[1]], "label") = "spam"
+    spam_corpus = c(spam_corpus, tmp_corpus)
+  }
+}
+
+```
+
+Use the same approach to build the non-spam (or "ham") corpus
+```{r ham-corpus, cache=T}
+
+if (!dir.exists("ham")){
+  download.file(url = "https://spamassassin.apache.org/publiccorpus/20021010_easy_ham.tar.bz2", destfile = "20021010_easy_ham.tar.bz2")
+  untar("20021010_easy_ham.tar.bz2",compressed = "bzip2")
+}
+
+ham_files = list.files(path = "easy_ham",full.names = T)
+
+# Construct the corpus frame by reading the first document
+
+tmp = readLines(con = ham_files[1])
+tmp = str_c(tmp, collapse = "")
+
+ham_corpus = Corpus(VectorSource(tmp))
+meta(ham_corpus[[1]], "label") = "ham"
+
+# Add the remaining documents from the folder
+for (i in 2: length(ham_files)) {
+ 
+  tmp = readLines(con = ham_files[i])
+  tmp = str_c(tmp, collapse = "")
+  
+  if (length(tmp) != 0) {
+    tmp_corpus = Corpus(VectorSource(tmp))
+    meta(tmp_corpus[[1]], "label") = "ham"
+    ham_corpus = c(ham_corpus, tmp_corpus)
+  }
+}
+
+```
+
+Combine the data in a single corpus that will be used throughout the rest of the processing.
+
+```{r}
+
+total_corpus = c(ham_corpus,spam_corpus)
+
+# Check that the spam/ham labels have been applied correctly
+meta_data = data.frame(unlist(meta(total_corpus, "label")))
+table(meta_data)
+
+```
+The number of spam & ham labels matches the original length of document folders.
+
+The collected text in the corpus is very messy. Here is an example of a single "spam" document:
+
+```{r}
+total_corpus[[3000]][1]
+```
+
+### Clean the data
+
+Apply cleaning functions of the `tm` package and some customized text transformers to each document in the corpus
+```{r cleanup}
+# Remove numbers 
+total_corpus = tm_map(total_corpus, content_transformer(removeNumbers))
+
+# Remove punctuation and anything between <brackets> or the "\t" string, as these parts are not informative
+total_corpus = tm_map(total_corpus, content_transformer(function(x) 
+  str_replace_all(x,pattern = "[[:punct:]]|\\<.+?\\>|\\t", replacement = " ")))
+
+# Apply further cleaning transformations
+total_corpus = tm_map(total_corpus, content_transformer(tolower))
+total_corpus = tm_map(total_corpus, content_transformer(stripWhitespace))
+total_corpus = tm_map(total_corpus, content_transformer(removePunctuation))
+total_corpus = tm_map(total_corpus, content_transformer(removePunctuation))
+total_corpus = tm_map(total_corpus, content_transformer(function(x)
+  removeWords(x, stopwords("english"))))
+
+```
+
+Now the content ratio in the text seems much higher:
+```{r}
+total_corpus[[3000]][1]
+```
+
+### Document classification
+
+Before modeling, we generate a permutation of the corpus dataset so that the 
+training and test split of the `create_container` function could be used without problems.
+```{r permutation}
+
+# Generate a random permutation of corpus documents
+set.seed(123)
+total_corpus1 = sample(total_corpus)
+
+# Extract the labels
+labels = unlist(meta(total_corpus1, "label"))
+head(labels,20)
+```
+
+Now we can create a document-term matrix. For weighting, we use the TF-IDF measure as described in the Data Science for Business Book. Also we do not allow words shorter than 2 (uninformative) or longer than 10 characters (these are words pasted together by mistake).   
+Using the DTM, we can apply three built-in models from the `RTextTools` library to predict the class ("ham" or "spam"):
+  
+- maximum entropy, 
+- support vector machine, 
+- and a gradient boosting machine.   
+We train the models on 75% of the dataset and use the other 25% for testing.  
+  
+```{r modeling, cache=T, message=F}
+
+# Create a dtm for the new corpus
+
+dtm = DocumentTermMatrix(total_corpus1, control = list(stemming=T, 
+                                                      weighting = weightTfIdf,
+                                                      wordLengths = c(3,10)))
+
+# Remove sparse terms appearing in less than 10 documents
+dtm = removeSparseTerms(dtm, 1-(10/length(total_corpus1)))
+
+# Create container
+library(RTextTools)
+N = length(labels)
+trainsize = round(N*0.75) # use 75% for training and the rest for the test
+container <- create_container(
+        dtm,
+        labels = labels,
+        trainSize = 1:trainsize, 
+        testSize = (trainsize+1):N, 
+        virgin = FALSE
+)
+
+# Train three models
+models = train_models(container, algorithms=c("MAXENT","SVM","BOOSTING"))
+
+# Generate results for the test data
+results = classify_models(container, models)
+
+
+```
+  
+### Results
+  
+Now we can compare the modeling results with the true label values for the test data.
+We can use precision and recall as metrics:
+  
+- *precision* = positive predictive value, or the share of true positives from all positives reported by the model (we define recognizing "spam"" as "positive"). If precision is high, our classifier does not incorrectly classify any non-spam e-mail as spam, and important messages do not land in the junk folder.   
+- *recall* = sensitivity, or the share of true positives reported by the model from all positives actually present in the data. If recall is high, our classifier does not let any spam message into our inbox.  
+
+```{r compare, warning=F, message=F}
+
+validation = data.frame(MAXENT = results$MAXENTROPY_LABEL, 
+                   SVM=results$SVM_LABEL, 
+                   BOOST=results$LOGITBOOST_LABEL,
+                   truelabel = labels[(trainsize+1):N],
+                   stringsAsFactors = F)
+
+max_perf = table(validation$MAXENT,validation$truelabel,dnn=c("MAXENT","True"))
+svm_perf = table(validation$SVM,validation$truelabel,dnn=c("SVM","True"))
+boost_perf = table(validation$BOOST,validation$truelabel,dnn=c("BOOST","True"))
+
+# Create special functions for our results tables
+precision = function(x) {x[2,2]/(x[2,2]+x[2,1])}
+recall = function(x) {x[2,2]/(x[2,2]+x[1,2])}
+
+# Calculate and visualize the metrics
+
+models_perf = data.frame(Model = c("MAXENT","SVM","BOOST"),
+                         Precision = unlist(lapply(list(max_perf,svm_perf,boost_perf),
+                                                   FUN = precision)),
+                         Recall = unlist(lapply(list(max_perf,svm_perf,boost_perf),
+                                                   FUN = recall)))
+library(plotly)
+
+plot_ly(data=models_perf, x = ~Model, y = ~Precision, type = "bar", 
+        name = "Precision") %>% 
+  add_trace(data=models_perf, x = ~Model, y = ~Recall, type = "bar", 
+            name = "Recall") %>% 
+  layout(title = "Classification Model Performance on Test Data",yaxis = list(title="Value"))
+
+```
+
+We see that the Boosting model performs unreasonably well having perfectly classified each message. This is a sign of overfitting. Maximum entropy model is on the second place. The SVM model performed the worst, with a recall of 93%, which means that 7% of spam messages would still land in the main inbox after the classification by this model.
+
+* * *   
+  
+**Reference**
+  
+- [Automated Data Collection with R, Chapter 10](http://www.r-datacollection.com/)
+- [Data Science for Business, Chapter 10](http://data-science-for-biz.com/DSB/Home.html)
+- DATA 607 Course discussion page
+- http://www.rtexttools.com/
+- https://cran.r-project.org/web/packages/PRROC/vignettes/PRROC.pdf
