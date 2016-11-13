@@ -1,0 +1,78 @@
+---
+title: "Data 607 Week 11 Assignment: Recommender Systems"
+author: "by Dmitriy Vecheruk"
+date: "13 November 2016"
+output: 
+  html_document:
+    toc: false
+    toc_float: true
+    collapsed: false
+    theme: lumen
+    code_folding: show
+    
+---
+
+This week's task is to analyze an existing recommender system that appears interesting by following these steps:
+
+1. Perform a Scenario Design analysis for the recommendation system.
+2. Attempt to reverse engineer what you can about the site, from the site interface and any available information that you can find on the Internet or elsewhere.
+3. Include specific recommendations about how to improve the site's recommendation capabilities going forward. 
+
+## Spotify Music Recommender System {.tabset .tabset-fade .tabset-pills}
+
+[**Spotify**](www.spotify.com) is a popular music streaming service. It provides free of charge (ad sponsored) and paid subscribtion plans. On its website and in the application, it offers music recommendations in a few ways. For this week's task I will focus on the "Discover Weekly".  This is a custom playlist made up of 30 songs that is renewed every week and provided separately to each registered user. According to some accounts^[1][1],[2][2]^, this feature has been very popular with the users.
+
+
+### 1. Scenario Design Analysis for "Discover Weekly"
+  
+**Scenario Design Analysis for Spotify's Customers**
+
+1) Who are the target users?  
+The target users are the subscribers of Spotify.
+
+2) What are their key goals?  
+Their key goal is to listen to their favorite songs and new music they might like.
+
+3) How can the recommender system help them accomplish these goals?  
+The "Discover Weekly" recommender system can help the users with discovering new content that is similar to their favorite songs, and thus likely also enjoyable to listen to.
+By providing the recommended content in a separate and regularly updated playlist, it creates a user-friendly "go to" option for the time when the user wants to be inspired by something new.  
+
+**Scenario Design Analysis for Spotify's Organization**
+
+1) Who are the target users?  
+Spotify business decision makers
+
+2) What are their key goals?  
+Increase profit by developing a growing base of premium tier subscribers and a growing catalogue of music. 
+
+3) How can the recommender system help them accomplish these goals?  
+The "Discover New" feature facilitates repeated use of the service, as it is updated weekly. Based on the good performance of the recommender system, it allows the users to discover the tracks they really like. As the system is based around both hits (songs added to playlists by many users) and towards individual user preferences, it allows both famous artists and smaller bands gain a larger audience by appearing on the "Discover Weekly" playlists and thus makes Spotify more attractive for musicians.
+
+### 2. "Reverse Engineering"
+
+This part is based on studying [2][2] and especially [3][3] and [4][4], where Spotify's engineers explain the development of the "Discover Weekly" service.
+
+Discover Weekly current recommendation pipeline is based on three main inputs which are themselves outputs of offline models:
+  
+* _Collaborative filtering models_ based on frequency of track plays by users that establish similarity between tracks and users
+* _Natural Language Processing models_ that use current news and blog posts from relevant websites ("Rolling Stone", "Pitchfork") as inputs and produce some form of a topic model for tracks as an output  
+* _Deep Learning models of track audio_ use raw audio spectrograms as input and produce a classification of tracks into clusters that sound similar  
+
+The three inputs are combined in a recommendation model that finally produces a prediction if the user will play the track or not.
+
+The approach is described in detail in the following presentation from Spotify:
+
+<iframe src="//www.slideshare.net/slideshow/embed_code/key/w4NPGZatbOtHkk?startSlide=29" width="595" height="485" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" style="border:1px solid #CCC; border-width:1px; margin-bottom:5px; max-width: 100%;" allowfullscreen> </iframe> <div style="margin-bottom:5px"> <strong> <a href="//www.slideshare.net/MrChrisJohnson/from-idea-to-execution-spotifys-discover-weekly" title="From Idea to Execution: Spotify&#x27;s Discover Weekly" target="_blank">From Idea to Execution: Spotify&#x27;s Discover Weekly</a> </strong> from <strong><a target="_blank" href="//www.slideshare.net/MrChrisJohnson">Chris Johnson</a></strong> </div>
+
+### 3. Recommendations
+  
+As the current implementation of the recommendation engine seems vastly successful, it is hard for an outsider to come up with additional improvements, as they would likely involve fine tuning of the models or the weights of particular model inputs.
+  
+As a user of the Discovery Weekly feature, I would recommend putting more weight into the track skipping behavior, as this is the most obvious indicator that the recommendation was irrelevant. 
+  
+Also, the current implementation is based on the idea that users rate the songs implicitly by listening to them from zero to many times. Using the information from "starred" tracks or maybe letting users rate each song on the "discover weekly" playlist with 1 to 5 stars could help improve the CF models by providing an explicit rank to compare against. Thus, the quality of the recommendations can be quickly tested in extremely large samples. 
+
+[1]: http://www.adweek.com/news/technology/even-spotify-surprised-huge-success-its-discover-weekly-playlists-173129  
+[2]: http://qz.com/571007/the-magic-that-makes-spotifys-discover-weekly-playlists-so-damn-good/
+[3]: http://www.slideshare.net/MrChrisJohnson/from-idea-to-execution-spotifys-discover-weekly/29-Discover_Weekly_Data_Flow
+[4]: https://benanne.github.io/2014/08/05/spotify-cnns.html#analysis 
