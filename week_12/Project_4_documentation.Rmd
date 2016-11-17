@@ -15,7 +15,14 @@ The goal of this project is to show how to migrate the data from a relational SQ
 I will use MySQL and Neo4j in this example and the database from the beginning of the course containing the information on the flights that started or landed in any of the three New York airports.  
 The idea is to use the airports as nodes and flights as nodes of two types in the graph, and each flight would connected to the arrival and departure airports by a directional edge (a "relationship" in Neo4j terms). Thus, one can quickly analyse the origins and destinations of flights going to/from New York.
 
-**THE BENEFIT OF USING a GRAPH DB**
+**Advantages and disatvantages of using Neo4j vs. a relational DB**
+
+Advantages:
++ It is easier and faster to do a graph search with many in-between nodes (from node 1 via node 2, 3..,to node x)
++ It is possible to calculate network-related statistics (like centrality etc.) easier
+
+Disadvantages:
+- For the current demo project, Neo4j with default settings requires a lot of RAM and performs much slower than a relational DB (MySQL) with default settings
 
 ### 1. Construct the SQL DB
   
