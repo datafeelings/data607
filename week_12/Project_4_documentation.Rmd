@@ -1,0 +1,162 @@
+---
+title: 'Data 607 Project 4: From MySQL to Neo4J'
+author: "By Dmitriy Vecheruk"
+date: "November 17, 2016"
+output: 
+  html_document:
+    toc: true
+    collapsed: false
+    theme: united
+---
+
+### 0. Introduction
+
+The goal of this project is to show how to migrate the data from a relational SQL DB to a NOSQL DB.  
+I will use MySQL and Neo4j in this example and the database from the beginning of the course containing the information on the flights that started or landed in any of the three New York airports.  
+The idea is to use the airports as nodes and flights as nodes of two types in the graph, and each flight would connected to the arrival and departure airports by a directional edge (a "relationship" in Neo4j terms). Thus, one can quickly analyse the origins and destinations of flights going to/from New York.
+
+**THE BENEFIT OF USING a GRAPH DB**
+
+### 1. Construct the SQL DB
+  
+Below is the SQL query used to build the tables for airports (holding airport codes and locations), and flights (holding data on individual flights).
+
+```{r eval=F}
+
+-- This query builds a relational DB from CSV files
+
+DROP SCHEMA IF EXISTS flights;
+CREATE SCHEMA flights;
+
+DROP TABLE IF EXISTS flights.airports;
+DROP TABLE IF EXISTS flights.flights;
+
+
+CREATE TABLE flights.airports (
+  faa char(3),
+  name varchar(100),
+  lat double precision,
+  lon double precision,
+  alt integer,
+  tz integer,
+  dst char(1)
+  );
+  
+LOAD DATA LOCAL INFILE '<insert path to file here>/airports.csv' 
+INTO TABLE flights.airports
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+CREATE TABLE flights.flights (
+year integer,
+month integer,
+day integer,
+dep_time integer,
+dep_delay integer,
+arr_time integer,
+arr_delay integer,
+carrier char(2),
+tailnum char(6),
+flight integer,
+origin char(3),
+dest char(3),
+air_time integer,
+distance integer,
+hour integer,
+minute integer
+);
+
+LOAD DATA LOCAL INFILE '<insert path to file here>/flights.csv' 
+INTO TABLE flights.flights
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(year, month, day, @dep_time, @dep_delay, @arr_time, @arr_delay,
+ @carrier, @tailnum, @flight, origin, dest, @air_time, @distance, @hour, @minute)
+SET
+dep_time = nullif(@dep_time,''),
+dep_delay = nullif(@dep_delay,''),
+arr_time = nullif(@arr_time,''),
+arr_delay = nullif(@arr_delay,''),
+carrier = nullif(@carrier,''),
+tailnum = nullif(@tailnum,''),
+flight = nullif(@flight,''),
+air_time = nullif(@air_time,''),
+distance = nullif(@distance,''),
+hour = dep_time / 100,
+minute = dep_time % 100
+;
+
+
+```
+
+### 2. Output the data from RDBMS into CSV file
+  
+This SQL query subsets the required fields and stores two CSV files without headers to a permitted location on the disk.
+
+```{r eval=F}
+-- This query stores a subset of the tables from the DB back into CSV files 
+
+SELECT faa, name, lat, lon
+INTO OUTFILE 'C:/ProgramData/MySQL/MySQL Server 5.7/Uploads/airports.csv'
+FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
+ESCAPED BY '\\'
+LINES TERMINATED BY '\n'
+FROM flights.airports;
+
+SELECT year, month, day, carrier, flight, origin, dest 
+INTO OUTFILE 'C:/ProgramData/MySQL/MySQL Server 5.7/Uploads/flights.csv'
+FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
+ESCAPED BY '\\'
+LINES TERMINATED BY '\n'
+FROM flights.flights;
+
+
+
+```
+
+### 3. Batch insert data into Neo4j
+
+These Cypher queries insert the data from the CSV files generated in the previous step into Neo4J as nodes and relationships.  
+Things to consider for reproducibility:
+1) A Neo4j instance should be running with an existing database connection  
+2) You should copy the CSV files from the step 2 into the permitted import location for your running Neo4j instance
+  
+The query below inserts the airports as nodes labeled "Airport" with the properties of the 3-digit code and geographical coordinates.
+
+```{r eval =F}
+MATCH (n) OPTIONAL MATCH (n)-[r]-() DELETE n,r;
+
+USING PERIODIC COMMIT 10000
+load csv from "file:///airports.csv" as airports 
+create (a1:Airport {faa: airports[0], name: airports[1], lat: airports[2], lon: airports[3]});
+
+```
+
+The next query inserts the flights nodes labeled "Flight" with the properties of the flight number, origin and departure airports, carrier, and the date of the flight. 
+
+```{r eval =F}
+USING PERIODIC COMMIT 10000
+load csv from "file:///flights.csv" as flights 
+create (n:Flight {year: flights[0], month: flights[1], day: flights[2],
+carrier: flights[3], flight: flights[4], origin: flights[5], dest: flights[6] });
+
+```
+
+The final queries insert the directional relationships connecting the flights with the origin and destination airports.
+
+```{r eval =F}
+
+USING PERIODIC COMMIT 10000
+
+match (f:Flight {dest: a.faa}), (a:Airport) 
+create (f) - [r: Arrives] -> (a);
+
+match (f:Flight {origin: a.faa}), (a:Airport) 
+create (f) - [r: Departs] -> (a)
+
+```
+
